@@ -1,0 +1,136 @@
+@startuml
+
+
+package "visible for any SDL components" #DDDDDD {
+
+interface Logger {
+  + bool isEnabledFor(LogLevel) = 0;
+  + bool Enabled() = 0;
+  + void PushLog(LogMessage) = 0;
+  + Logger& instance(Logger* logger = nullptr) = 0;
+}
+
+class AutoTrace {
+  + AutoTrace()
+  + ~AutoTrace()
+}
+
+class LocationInfo {
+  + file
+  + line
+  + pretty_function
+}
+
+abstract TimePoint{}
+
+class LogMessage {
+  + string component_
+  + LogLevel log_level_
+  + string log_event_
+  + TimePoint timestamp_
+  + LocationInfo location_
+  + thread_id thread_id_
+}
+
+
+enum  LogLevel { 
+    TRACE
+    DEBUG
+    INFO
+    WARN
+    ERROR
+    FATAL 
+}
+
+abstract LogMacro {
+  CERATE_SDL_LOG_VARIABLE
+  CERATE_SDL_LOG_LOCAL
+  CERATE_SDL_LOG_LOCAL
+  SDL_LOG_TRACE
+  SDL_LOG_DEBUG
+  SDL_LOG_INFO
+  SDL_LOG_WARN
+  SDL_LOG_ERROR
+  SDL_LOG_FATAL
+  SDL_LOG_AUTO_TRACE
+}
+
+AutoTrace -down-> Logger
+LogMacro  -down-> Logger
+LogMacro .right.> LogMessage : create
+LogMessage *-- LocationInfo
+LogMessage *-- TimePoint
+LogMessage *-- LogLevel
+}
+
+interface ThirdPartyLogger {
+  + Init() = 0;
+  + Deinit() = 0;
+}
+
+ThirdPartyLogger -up-|> Logger 
+
+
+
+package "have access to log4cxx library" #DDDDDD {
+
+class Log4CXXLogger  {
+  log4cxx bindings:
+  - LogLevel to Log4CxxLogLevel 
+  - TimeStamp  to Log4CxxTimeStamp
+  - LocationInfo  to Log4CxxLocationInfo
+}
+
+class "log4cxx::" as log4cxx
+log4cxx <-right- Log4CXXLogger
+
+}
+
+
+package "visible only for Main/TestMain" #DDDDDD {
+
+interface LoggerInitializer <templated ExternalLogger> {
+  + void Init(ExternalLogger* impl_) = 0;
+  + void DeInit() = 0;
+}
+
+
+class SDLLogger <templated ExternalLogger> {
+  loop_thread
+  ExternalLogger* impl_
+  Logger& instance(Logger* init_value);
+}
+
+}
+ 
+note "\
+Logger& Logger::instance(Logger* pre_init) { \n\
+  static Logger* instance_ = nullptr; \n\
+  if (pre_init) { \n\
+    assert(instance_ == nullptr);\n\
+    instance_ = pre_init;\n\
+  }\n\
+  return *instance_;\n\
+}" as N1
+SDLLogger .right. N1 
+
+SDLLogger -up-|> Logger
+SDLLogger -up-|> LoggerInitializer
+
+Log4CXXLogger -up-|> ThirdPartyLogger
+
+SDLLogger *-left-> ThirdPartyLogger : proxy calls
+
+
+
+class Main
+
+Main .up.> SDLLogger  
+Main  .up.> Log4CXXLogger : create
+note "Main(orTestMain) creates SDLLogger,  \n\
+ExternalLogger Injects ExternalLogger to SDLLogger, \n\
+Takes care about SDLLogger life cycle" as N2
+
+N2 .left. Main
+@enduml
+

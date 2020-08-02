@@ -8,7 +8,7 @@ SDL implements Logger abstration for easily replace library for logging.
 
 |||
 High Level Design
-![TM](./assets/high_level_design.png)
+![Logger](./assets/high_level_design.png)
 |||
 
 
@@ -20,6 +20,7 @@ All components have aceess to `Logger` interface and use it for logging.
 
 SDLLoggerImpl use message loop thread to proxy loggin message to thard party (external) logger.
 SDLLoggerImpl owns `ExternalLogger` and controlls it's life cycle. 
+SDLLoggerImpl provide implementation of the singleton pattern.
 
 
 ### Message loop thread in SDLLogger
@@ -76,5 +77,83 @@ SDL Core part will give pointer to logger singleton to the plugin so that plugin
 
 ## Logger detailed design :
 
+Each component creates `logger_` variable via macro. 
+This variable is actually a string with component name of the logger.
+Some logger implementations (like log4cxx) may have separate suverity or destanation  rules for each component. 
 
-Logger int
+Loggin macroses used to create such variable in each source file where loggin is required.
+
+SDL implements all info required for log message :
+
+ * LogLevel enum
+ * Location info struct : location in the code
+ * TimePoint 
+
+
+|||
+Detailed Design
+![Logger in details](./assets/detailed_logger_design.png)
+|||
+
+
+### Logger interface 
+
+Logger macroses use Logger interface for sending messages to External Logger. 
+Logger interface contains only methods required by any SDL component to perform logging : 
+
+ * PushLog(LogMessage)
+ * IsEnabledFor(LogLevel)
+ * Enabled()
+ * instance() - singleton
+
+
+### LoggerInitializer interface 
+
+LoggerInitializer specify interface required for Main to init/deinit logger but not required for any other SDL components
+LoggerInitializer should be templated with paticular ExternalLogger implementation
+
+It contains : 
+ - Init(ExternalLogger* external_logger)
+ - DeInit()
+
+Init and DeInit should perform internal initialization/deinitializetion and be proxied to ExternalLogger
+
+### ThirdPartyLogger interface
+
+ThirdPartyLogger interface extends Logger Interface with Initialisation and deinitialisation methods
+
+This interface should be inherited by paticulat external logger implementation 
+
+
+## Another logger implementation. 
+
+
+To use another (not log4cxx) logger, you should implement ThirdPartyLoggerInterface class 
+
+```cpp
+AnotherOneLoggerImpl : ThirdPartyLoggerInterface {
+  void SomeCustomMethod(parameters);
+  void Init() override;
+  void DeInit() override;
+  void Enable() override;
+  bool Enabled() override;
+  void Disable() override;
+  void Flush() override;
+  void PushLog(const LogMessage& log_message) override;
+}
+```
+
+Then you should create `AnotherOneLoggerImpl` in main and setup it for `SDLLoggerImpl` :
+```cpp
+// main.cpp
+int main(argc, argv) {
+	auto external_logger_ = std::make_unique<AnotherOneLoggerImpl>();
+	external_logger_->SomeCustomMethod(argv);
+	auto sdl_logger_instance_ = std::make_unique<SDLLoggerImpl<AnotherOneLoggerImpl>>();
+	sdl_logger_instance_->Init(std::move(external_logger_));
+	Logger::instance(std::move(sdl_logger_instance_));  
+
+	// Any other application code
+}
+
+```
