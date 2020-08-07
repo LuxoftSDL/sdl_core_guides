@@ -14,43 +14,45 @@ High Level Design
 
 All components have aceess to `Logger` interface and use it for logging.
 
-## SDLLogger
+## LoggerImpl
 
-`Logger` interface is implemented by `SDLLoggerImpl`. 
+`Logger` interface is implemented by `LoggerImpl`. 
 
-`SDLLoggerImpl` use message loop thread to proxy log messages to third party (external) logger.
-`SDLLoggerImpl` owns `ExternalLogger` and controls it's lifetime. 
-`SDLLoggerImpl` provides implementation of the singleton pattern.
+`LoggerImpl` use message loop thread to proxy log messages to third party (external) logger.
+`LoggerImpl` owns `ThirdPartyLoggerInterface` and controls it's lifetime. 
+`LoggerImpl` provides implementation of the singleton pattern.
 
 
 ### Message loop thread in SDLLogger
 
 Message loop thread is needed to avoid significant performance degradation in run time as logging calls are blocking calls and might take too much time. 
-`SDLLoggerImpl::PushLog` is non a blocking call. It will put the log message into the queue and returns immediately 
+`LoggerImpl::PushLog` is non a blocking call. It will put the log message into the queue and returns immediately 
 
 
-If `ExternalLogger` supports non blocking threaded logging, minor changes in `SDLLogger` are required : `SDLLoggerImpl::PushLog` should be reimplemented to 
-use `ExternalLogger::ForceLog()` directly. 
+If `ThirdPartyLoggerInterface` supports non blocking threaded logging, minor changes in `LoggerImpl` can be created with `use_message_loop_thread = false`. 
 
 ## Logger singleton 
 
 Logger is the only one singleton class in SDL.
 Singleton pattern required to have an access to logger from any component. 
-Logger singleton provides singleton by `Logger` interface. 
-So sdl components do not have information about neither logger implementation nor specific external logger. 
+`Logger::instance()` provides singleton by `Logger` interface.
+So SDL components do not have information about neither logger implementation nor specific external logger. 
 
 ## Logger singleton with plugins 
 
 SDL plugins are shared libraries, so `LoggerSingleton` could not be implemented with Mayers singleton. 
-Mayers singleton would create own SDL logger instance.
+Mayers singleton would create own SDL logger instance for each plugin.
 
 The idea is to pass singleton pointer to Plugin during creation, so that plugin could initialize `Logger::instance` pointer with one received from SDL core. 
 
 
-Instance implementation : 
+Singleton Instance implementation : 
 ```cpp
+// ilogger.h
 static Logger& instance(Logger* pre_init = nullptr);
 
+...
+// logger_impl.cc
 Logger& Logger::instance(Logger* pre_init) {
   static Logger* instance_ = nullptr;
   if (pre_init) {
@@ -73,15 +75,14 @@ extern "C" PluginType* Create(Logger* logger_singleton_instance) {
 }
 ```
 
-SDL Core part will give pointer to logger singleton to the plugin so that plugin shared lib could initialize `Logger::instance` with the same pointer as core part. 
+SDL Core part will pass pointer to logger singleton to the plugin so that plugin shared lib could initialize `Logger::instance` with the same pointer as core part. 
 
 ## Logger detailed design :
 
-Each component creates `logger_` variable via macro. 
+Each source file creates `logger_` variable via macro `SDL_CREATE_LOG_VARIABLE`. 
 This variable is actually a string with component name of the logger.
-Some logger implementations (like log4cxx) may have separate suverity or destanation  rules for each component. 
+Some logger implementations (like log4cxx) may have separate suverity or destanation rules for each component. 
 
-Logger macroses used to create such variable in each source file where logging is required.
 
 SDL implements all info required for log message :
 
@@ -101,28 +102,26 @@ Detailed Design
 Logger macroses use Logger interface for sending messages to External Logger. 
 Logger interface contains only methods required by any SDL component to perform logging : 
 
+ * instance() - singleton access
  * PushLog(LogMessage)
  * IsEnabledFor(LogLevel)
- * Enabled()
- * instance() - singleton
+ * DeInit()
+ * Flush() 
 
 
 ### LoggerInitializer interface 
 
-LoggerInitializer specify interface required for Main to init/deinit logger but not required for any other SDL components
-LoggerInitializer should be templated with paticular ExternalLogger implementation
+LoggerInitializer specify interface required for Main to init logger but not required for any other SDL components
 
-It contains : 
- - Init(ExternalLogger* external_logger)
- - DeInit()
+LoggerInitializer should take and own the third party implementation into `Init` method. 
+ - Init(std::unique_ptr<ThirdPartyLoggerInterface>&& third_party)
 
-Init and DeInit should perform internal initialization/deinitializetion and be proxied to ExternalLogger
 
 ### ThirdPartyLogger interface
 
-ThirdPartyLogger interface extends Logger Interface with Initialization and deinitialization methods
+ThirdPartyLogger interface describes interfaces that should be implemented by external logger adapter. 
 
-This interface should be inherited by particular external logger implementation 
+This interface should be inherited by particular external logger implementation. 
 
 
 ## Another logger implementation. 
@@ -132,7 +131,6 @@ To use another (not log4cxx) logger, you should implement ThirdPartyLoggerInterf
 
 ```cpp
 AnotherOneLoggerImpl : ThirdPartyLoggerInterface {
-  void SomeCustomMethod(parameters);
   void Init() override;
   void DeInit() override;
   void Enable() override;
@@ -140,20 +138,23 @@ AnotherOneLoggerImpl : ThirdPartyLoggerInterface {
   void Disable() override;
   void Flush() override;
   void PushLog(const LogMessage& log_message) override;
+
+  void SomeCustomMethod(parameters);
 }
 ```
 
-Then you should create `AnotherOneLoggerImpl` in main and setup it for `SDLLoggerImpl` :
+Then you should create `AnotherOneLoggerImpl` in main and setup it for `LoggerImpl`.
+Note that `Logger::instance` does not own logger instance. `main` function is reponsible for `sdl_logger_instance_` lifecycle.
+
 ```cpp
 // main.cpp
 int main(argc, argv) {
 	auto external_logger_ = std::make_unique<AnotherOneLoggerImpl>();
 	external_logger_->SomeCustomMethod(argv);
-	auto sdl_logger_instance_ = std::make_unique<SDLLoggerImpl<AnotherOneLoggerImpl>>();
+	auto sdl_logger_instance_ = new LoggerImpl(external_logger_);
 	sdl_logger_instance_->Init(std::move(external_logger_));
-	Logger::instance(std::move(sdl_logger_instance_));  
-
-	// Any other application code
+	Logger::instance(sdl_logger_instance_);  
+	// Futher application code
 }
 
 ```

@@ -4,7 +4,7 @@
 
 interface Logger
 
-class SDLLogger <templated with ExternalLogger>{
+class SDLLogger {
   loop_thread
   ExternalLogger* impl_
 }

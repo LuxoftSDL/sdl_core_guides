@@ -4,14 +4,11 @@
 package "visible for any SDL components" #DDDDDD {
 
 interface Logger {
-  + bool isEnabledFor(LogLevel) = 0;
-  + bool Enabled() = 0;
-  + void PushLog(LogMessage) = 0;
-  + bool isEnabledFor(string, LogLevel) = 0;
+  + bool isEnabledFor(component, LogLevel) = 0;
   + void DeInit() = 0;
   + void Flush() = 0;
   + void PushLog(LogMessage) = 0;
-  + Logger& instance(Logger* logger = nullptr) = 0;
+  + Logger& instance(Logger* initializer = nullptr) = 0;
 }
 
 class AutoTrace {
@@ -20,9 +17,9 @@ class AutoTrace {
 }
 
 class LocationInfo {
-  + file
-  + line
-  + pretty_function
+  + file_name
+  + function_name
+  + line_number
 }
 
 abstract TimePoint{}
@@ -38,30 +35,28 @@ class LogMessage {
 
 
 enum  LogLevel { 
-    TRACE
-    DEBUG
-    INFO
-    WARN
-    ERROR
-    TRACE_LEVEL
-    DEBUG_LEVEL
-    INFO_LEVEL
-    WARN_LEVEL
-    ERROR_LEVEL
-    FATAL _LEVEL
+  TRACE_LEVEL
+  DEBUG_LEVEL
+  INFO_LEVEL
+  WARNING_LEVEL
+  ERROR_LEVEL
+  FATAL_LEVEL
 }
 
 abstract LogMacro {
-  CERATE_SDL_LOG_VARIABLE
-  CERATE_SDL_LOG_LOCAL
-  SDL_CREATE_LOGGERPTR
+  SDL_CREATE_LOG_VARIABLE
+  SDL_CREATE_LOCAL_LOG_VARIABLE
+  SDL_FLUSH_LOGGER
+  SDL_DEINIT_LOGGER
   SDL_LOG_TRACE
+  SDL_LOG_AUTO_TRACE
   SDL_LOG_DEBUG
   SDL_LOG_INFO
   SDL_LOG_WARN
+  SDL_LOG_WARN_WITH_ERRNO
   SDL_LOG_ERROR
+  SDL_LOG_ERROR_WITH_ERRNO
   SDL_LOG_FATAL
-  SDL_LOG_AUTO_TRACE
 }
 
 AutoTrace -down-> Logger
@@ -72,15 +67,13 @@ LogMessage *-- TimePoint
 LogMessage *-- LogLevel
 }
 
-interface ThirdPartyLogger {
+
+interface ThirdPartyLoggerInterface {
   + Init() = 0;
   + Deinit() = 0;
   IsEnabledFor(string, LogLevel) = 0;
   PushLog(LogMessage) = 0;
 }
-
-ThirdPartyLogger -up-|> Logger 
-
 
 
 package "have access to log4cxx library" #DDDDDD {
@@ -92,6 +85,7 @@ class Log4CXXLogger  {
   - LocationInfo  to Log4CxxLocationInfo
 }
 
+Log4CXXLogger -up-|> ThirdPartyLoggerInterface
 class "log4cxx::" as log4cxx
 log4cxx <-right- Log4CXXLogger
 
@@ -100,15 +94,14 @@ log4cxx <-right- Log4CXXLogger
 
 package "visible only for Main/TestMain" #DDDDDD {
 
-interface LoggerInitializer <templated ExternalLogger> {
-  + void Init(ExternalLogger* impl_) = 0;
-  + void DeInit() = 0;
+interface LoggerInitializer  {
+  + void Init(ThirdPartyLoggerInterface* impl_) = 0;
 }
 
 
-class SDLLogger <templated ExternalLogger> {
+class LoggerImpl  {
   loop_thread
-  ExternalLogger* impl_
+  ThirdPartyLoggerInterface* impl_
   Logger& instance(Logger* init_value);
 }
 
@@ -123,24 +116,23 @@ Logger& Logger::instance(Logger* pre_init) { \n\
   }\n\
   return *instance_;\n\
 }" as N1
-SDLLogger .right. N1 
+LoggerImpl .right. N1 
 
-SDLLogger -up-|> Logger
-SDLLogger -up-|> LoggerInitializer
+LoggerImpl -up-|> Logger
+LoggerImpl -up-|> LoggerInitializer
 
-Log4CXXLogger -up-|> ThirdPartyLogger
 
-SDLLogger *-left-> ThirdPartyLogger : proxy calls
+LoggerImpl *-left-> ThirdPartyLoggerInterface : proxy calls
 
 
 
 class Main
 
-Main .up.> SDLLogger  
+Main .up.> LoggerImpl  
 Main  .up.> Log4CXXLogger : create
-note "Main(orTestMain) creates SDLLogger,  \n\
-ExternalLogger Injects ExternalLogger to SDLLogger, \n\
-Takes care about SDLLogger life cycle" as N2
+note "Main(orTestMain) creates LoggerImpl,  \n\
+ExternalLogger Injects ExternalLogger to LoggerImpl, \n\
+Takes care about LoggerImpl life cycle" as N2
 
 N2 .left. Main
 @enduml
