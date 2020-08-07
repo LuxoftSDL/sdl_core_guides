@@ -1,10 +1,10 @@
 # SDL Logger
 
 Open source version of SDL is using log4cxx for logging.
-Because of lack of log4cxx stability OEM have an ability to replace log4cxx logger with any other logging boost or syslog.
+Because of lack of log4cxx stability OEM should have an ability to replace log4cxx logger with any other logging boost or syslog.
 
 
-SDL implements Logger abstration for easily replace library for logging.
+SDL implements Logger abstration for easily replacement of logging library.
 
 |||
 High Level Design
@@ -18,18 +18,18 @@ All components have aceess to `Logger` interface and use it for logging.
 
 `Logger` interface is implemented by `SDLLoggerImpl`. 
 
-SDLLoggerImpl use message loop thread to proxy loggin message to thard party (external) logger.
-SDLLoggerImpl owns `ExternalLogger` and controlls it's life cycle. 
-SDLLoggerImpl provide implementation of the singleton pattern.
+`SDLLoggerImpl` use message loop thread to proxy log messages to third party (external) logger.
+`SDLLoggerImpl` owns `ExternalLogger` and controls it's lifetime. 
+`SDLLoggerImpl` provides implementation of the singleton pattern.
 
 
 ### Message loop thread in SDLLogger
 
-Message loop thread is needed to avoid significant performance degradation in run time is logging calls are blocking calls and takes to much time. 
-`SDLLoggerImpl::PushLog` is non blocking call. It will put log message in to the queue and exit immediately 
+Message loop thread is needed to avoid significant performance degradation in run time as logging calls are blocking calls and might take too much time. 
+`SDLLoggerImpl::PushLog` is non a blocking call. It will put the log message into the queue and returns immediately 
 
 
-If `ExternalLogger` supports non blocking threaded logging, minor changes in SDLLogger are required : `SDLLoggerImpl::PushLog` should be reimplemented to 
+If `ExternalLogger` supports non blocking threaded logging, minor changes in `SDLLogger` are required : `SDLLoggerImpl::PushLog` should be reimplemented to 
 use `ExternalLogger::ForceLog()` directly. 
 
 ## Logger singleton 
@@ -41,10 +41,10 @@ So sdl components do not have information about neither logger implementation no
 
 ## Logger singleton with plugins 
 
-SDL plugins are shared librariess, so LoggerSingleton could not be implemented with Mayers singleton. 
+SDL plugins are shared libraries, so `LoggerSingleton` could not be implemented with Mayers singleton. 
 Mayers singleton would create own SDL logger instance.
 
-The idea is to pass singleton pointer to Plugin during creation, so that plugin could initialize Logger::instance pointer with received from sdl_core. 
+The idea is to pass singleton pointer to Plugin during creation, so that plugin could initialize `Logger::instance` pointer with one received from SDL core. 
 
 
 Instance implementation : 
@@ -63,7 +63,7 @@ Logger& Logger::instance(Logger* pre_init) {
 ```
 
 `pre_init` is `nullptr` by default, so all components will access instance_ static pointer for logging. 
-`main()`  function neet to create SDLLogger implementation and call Logger::instance(logger_implementation);
+`main()`  function need to create `SDLLogger` implementation and call `Logger::instance` (logger implementation);
 
 Plugin implementation:
 ```cpp 
@@ -81,7 +81,7 @@ Each component creates `logger_` variable via macro.
 This variable is actually a string with component name of the logger.
 Some logger implementations (like log4cxx) may have separate suverity or destanation  rules for each component. 
 
-Loggin macroses used to create such variable in each source file where loggin is required.
+Logger macroses used to create such variable in each source file where logging is required.
 
 SDL implements all info required for log message :
 
@@ -120,9 +120,9 @@ Init and DeInit should perform internal initialization/deinitializetion and be p
 
 ### ThirdPartyLogger interface
 
-ThirdPartyLogger interface extends Logger Interface with Initialisation and deinitialisation methods
+ThirdPartyLogger interface extends Logger Interface with Initialization and deinitialization methods
 
-This interface should be inherited by paticulat external logger implementation 
+This interface should be inherited by particular external logger implementation 
 
 
 ## Another logger implementation. 
